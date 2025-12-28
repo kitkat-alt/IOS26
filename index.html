@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <?!= include('css'); ?>
+  </head>
+  <body class="antialiased h-screen flex flex-col overflow-hidden" onload="initHomeHeader()">
+
+    <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(this)">
+
+    <div id="loader" class="hidden fixed inset-0 z-[100] bg-white/50 backdrop-blur-md flex justify-center items-center">
+        <div class="glass p-8 rounded-3xl flex flex-col items-center animate-float">
+            <div class="w-10 h-10 border-4 border-blue-400/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+            <span class="text-blue-600 font-bold tracking-widest text-xs">LOADING</span>
+        </div>
+    </div>
+
+    <main class="flex-1 overflow-y-auto no-scrollbar w-full max-w-md mx-auto relative px-4 pb-[7rem]"> 
+      
+      <div id="homeSection" class="view-section animate-fade-in h-full flex flex-col justify-start pt-[20vh]">
+        
+        <div id="searchArea" class="w-full flex-none flex flex-col items-center relative z-10">
+            <div class="mb-8 scale-110">
+                <h1 class="font-extrabold text-6xl tracking-tight text-gray-800 drop-shadow-sm">
+                    <span class="text-blue-500">H</span>ORiZON<span class="text-blue-500 text-sm ml-1 align-top">z</span>
+                </h1>
+                <p class="text-center text-gray-500 text-[10px] tracking-[0.3em] mt-2 font-medium">ชั่วคราว</p>
+            </div>
+            
+            <div class="w-full relative mb-6 group">
+                <input type="number" id="visitorCardId" 
+                    onkeydown="if(event.key === 'Enter') { this.blur(); handleVisitorAction(); }" 
+                    class="glass-input w-full h-20 pl-6 pr-32 rounded-[2.5rem] text-3xl font-bold placeholder-gray-400 shadow-lg text-gray-800" 
+                    placeholder="">
+                
+                <div class="absolute right-2 top-2 h-16 flex items-center gap-1 bg-white/40 rounded-[2rem] px-2 backdrop-blur-sm border border-white/50">
+                    <button onclick="startQrScanner()" class="w-12 h-12 rounded-full flex items-center justify-center text-gray-600 hover:bg-white/50 active:scale-90 transition">
+                        <i class="fas fa-qrcode text-xl"></i>
+                    </button>
+                    <div class="w-px h-8 bg-gray-300"></div>
+                    <button onclick="handleVisitorAction()" class="w-12 h-12 rounded-full flex items-center justify-center text-blue-600 font-bold hover:bg-blue-100/50 active:scale-90 transition">
+                        <i class="fas fa-search text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="homeTempStatusContainer" class="w-full mt-4 hidden flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-2"></div>
+
+        <div id="entryFormArea" class="hidden glass p-6 rounded-[2.5rem] mt-4 relative animate-scale-in border border-white/60 shadow-xl bg-white/80">
+            <button onclick="resetHome()" class="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:text-gray-800"><i class="fas fa-times"></i></button>
+            <h2 class="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2"><i class="fas fa-car-side text-blue-500"></i> บันทึกรถเข้า</h2>
+            <div class="space-y-4">
+                <div><label class="block text-xs font-bold text-gray-500 mb-1 ml-4">เลขบัตร</label><input type="text" id="entryCardIdDisplay" readonly class="glass-input w-full h-12 rounded-2xl px-4 text-gray-800 font-bold bg-gray-50 border-0 text-center"></div>
+                <div><label class="block text-xs font-bold text-gray-500 mb-1 ml-4">เลขห้อง</label><input type="number" id="entryRoomNo" onkeydown="if(event.key === 'Enter') { this.blur(); openCamera('plate'); }" class="glass-input w-full h-14 rounded-2xl px-4 text-xl font-bold text-center placeholder-gray-400" placeholder="ระบุเลขห้อง"></div>
+                <div><label class="block text-xs font-bold text-gray-500 mb-1 ml-4">รูปทะเบียน</label><div id="plateImageContainer" onclick="openCamera('plate')" class="w-full h-32 bg-white/50 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/80 transition relative overflow-hidden border border-dashed border-gray-400"><div id="platePlaceholder" class="flex flex-col items-center text-gray-400"><i class="fas fa-camera text-2xl mb-1"></i><span class="text-[10px]">แตะเพื่อถ่ายรูป</span></div><img id="platePreview" class="hidden absolute inset-0 w-full h-full object-cover"></div></div>
+                <button onclick="submitEntry()" class="w-full h-14 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold rounded-2xl shadow-lg mt-2 transition">ยืนยัน</button>
+            </div>
+        </div>
+      </div>
+
+      <div id="appSection" class="hidden view-section animate-fade-in h-full flex flex-col">
+          
+          <div id="appMenuPage" class="flex-1 flex flex-col pt-8">
+               <div class="mb-8 px-2">
+                 <div class="glass p-1.5 rounded-full flex items-center h-12 relative shadow-lg bg-white/60">
+                     <i class="fas fa-search text-gray-400 absolute left-4"></i>
+                     <input type="text" id="quickSearchInput" onkeydown="if(event.key === 'Enter') { this.blur(); handleQuickSearch(); }" class="flex-1 bg-transparent h-full pl-10 pr-12 text-sm text-gray-800 placeholder-gray-400 outline-none font-medium" placeholder="ค้นหา...">
+                     <button onclick="handleQuickSearch()" class="bg-blue-500 text-white w-9 h-9 rounded-full flex items-center justify-center hover:bg-blue-600 absolute right-1.5 shadow-md"><i class="fas fa-arrow-right text-xs"></i></button>
+                 </div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-y-8 gap-x-2 px-2">
+                  <div onclick="openAppSubPage('history')" class="flex flex-col items-center gap-2 active:scale-90 transition cursor-pointer">
+                      <div class="w-16 h-16 rounded-[1.3rem] bg-gradient-to-br from-orange-300 to-pink-400 flex items-center justify-center text-white shadow-lg shadow-orange-200"><i class="fas fa-history text-2xl"></i></div>
+                      <span class="text-[10px] font-bold text-gray-600">ประวัติ</span>
+                  </div>
+                  <div onclick="openAppSubPage('temp')" class="flex flex-col items-center gap-2 active:scale-90 transition cursor-pointer">
+                      <div class="w-16 h-16 rounded-[1.3rem] bg-gradient-to-br from-blue-300 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-200"><i class="fas fa-clock text-2xl"></i></div>
+                      <span class="text-[10px] font-bold text-gray-600">ชั่วคราว</span>
+                  </div>
+                  <div onclick="openAppSubPage('license')" class="flex flex-col items-center gap-2 active:scale-90 transition cursor-pointer">
+                      <div class="w-16 h-16 rounded-[1.3rem] bg-gradient-to-br from-emerald-300 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-200"><i class="fas fa-car text-2xl"></i></div>
+                      <span class="text-[10px] font-bold text-gray-600">ทะเบียน</span>
+                  </div>
+                  <div onclick="openAppSubPage('owner')" class="flex flex-col items-center gap-2 active:scale-90 transition cursor-pointer">
+                      <div class="w-16 h-16 rounded-[1.3rem] bg-gradient-to-br from-indigo-300 to-purple-400 flex items-center justify-center text-white shadow-lg shadow-indigo-200"><i class="fas fa-users text-2xl"></i></div>
+                      <span class="text-[10px] font-bold text-gray-600">เจ้าของ</span>
+                  </div>
+                  
+                  <div onclick="openAiMode()" class="flex flex-col items-center gap-2 active:scale-90 transition cursor-pointer mt-2">
+                      <div class="w-16 h-16 rounded-[1.3rem] bg-white border border-gray-200 flex items-center justify-center text-gray-800 shadow-lg relative overflow-hidden">
+                          <span class="font-extrabold text-2xl italic text-gray-800">Ai</span>
+                      </div>
+                      <span class="text-[10px] font-bold text-gray-600">โหมด AI</span>
+                  </div>
+              </div>
+          </div>
+
+          <div id="visitorHistoryPage" class="hidden flex-1 flex flex-col h-full pt-6">
+              <div class="flex items-center gap-4 mb-4 px-1"><button onclick="openAppSubPage('menu')" class="w-9 h-9 rounded-full bg-white/50 flex items-center justify-center text-gray-600 hover:bg-white"><i class="fas fa-chevron-left"></i></button><h2 class="text-xl font-bold text-gray-800">ประวัติ Visitor</h2></div>
+              <div id="historyListContainer" class="flex-1 overflow-y-auto space-y-2 px-1"></div>
+          </div>
+
+          <div id="tempParkingPage" class="hidden flex-1 flex flex-col h-full pt-6">
+              <div class="flex justify-between items-center mb-4 px-1"><div class="flex items-center gap-4"><button onclick="openAppSubPage('menu')" class="w-9 h-9 rounded-full bg-white/50 flex items-center justify-center text-gray-600 hover:bg-white"><i class="fas fa-chevron-left"></i></button><h2 class="text-xl font-bold text-gray-800">จอดชั่วคราว</h2></div><button onclick="openAddTempModal()" class="w-9 h-9 rounded-full bg-blue-500 text-white hover:bg-blue-600 flex items-center justify-center shadow-md"><i class="fas fa-plus"></i></button></div>
+              <div class="flex glass p-1 rounded-xl mb-4 mx-1 bg-white/40"><div id="tabTempActive" onclick="switchTempTab('active')" class="flex-1 py-1.5 text-center text-xs font-bold rounded-lg bg-white shadow-sm text-blue-600 transition cursor-pointer">Active</div><div id="tabTempHistory" onclick="switchTempTab('history')" class="flex-1 py-1.5 text-center text-xs text-gray-500 transition cursor-pointer hover:text-gray-800">History</div></div>
+              <input type="text" id="tempSearchInput" onkeyup="renderTempList()" class="glass-input w-full h-10 rounded-xl px-4 text-sm mb-4 mx-1 bg-white/60 text-gray-800 placeholder-gray-400" placeholder="ค้นหา...">
+              <div id="tempListContainer" class="flex-1 overflow-y-auto space-y-2 px-1"></div>
+          </div>
+          
+          <div id="licensePlatePage" class="hidden flex-1 flex flex-col h-full pt-6">
+               <div class="flex justify-between items-center mb-4 px-1"><div class="flex items-center gap-4"><button onclick="openAppSubPage('menu')" class="w-9 h-9 rounded-full bg-white/50 flex items-center justify-center text-gray-600 hover:bg-white"><i class="fas fa-chevron-left"></i></button><h2 class="text-xl font-bold text-gray-800">ทะเบียนรถ</h2></div><button onclick="openAddLicenseModal()" class="w-9 h-9 rounded-full bg-green-500 text-white hover:bg-green-600 flex items-center justify-center shadow-md"><i class="fas fa-plus"></i></button></div>
+              <input type="text" id="licenseSearchInput" onkeyup="renderLicenseList()" class="glass-input w-full h-10 rounded-xl px-4 text-sm mb-4 mx-1 bg-white/60 text-gray-800 placeholder-gray-400" placeholder="ค้นหา...">
+              <div id="licenseListContainer" class="flex-1 overflow-y-auto space-y-2 px-1"></div>
+          </div>
+
+          <div id="ownerListPage" class="hidden flex-1 flex flex-col h-full pt-6">
+              <div class="flex justify-between items-center mb-4 px-1"><div class="flex items-center gap-4"><button onclick="openAppSubPage('menu')" class="w-9 h-9 rounded-full bg-white/50 flex items-center justify-center text-gray-600 hover:bg-white"><i class="fas fa-chevron-left"></i></button><h2 class="text-xl font-bold text-gray-800">รายชื่อเจ้าของ</h2></div><button onclick="openAddOwnerModal()" class="w-9 h-9 rounded-full bg-purple-500 text-white hover:bg-purple-600 flex items-center justify-center shadow-md"><i class="fas fa-plus"></i></button></div>
+              <input type="text" id="ownerSearchInput" onkeyup="renderOwnerList()" class="glass-input w-full h-10 rounded-xl px-4 text-sm mb-4 mx-1 bg-white/60 text-gray-800 placeholder-gray-400" placeholder="ค้นหา...">
+              <div id="ownerListContainer" class="flex-1 overflow-y-auto space-y-2 px-1"></div>
+          </div>
+
+          <div id="aiModePage" class="hidden flex-1 flex flex-col h-full pt-6">
+               <div id="aiMenuSubPage" class="flex-1 flex flex-col">
+                   <div class="flex items-center gap-4 mb-6 px-1"><button onclick="openAppSubPage('menu')" class="w-9 h-9 rounded-full glass flex items-center justify-center text-white"><i class="fas fa-chevron-left"></i></button><h2 class="text-xl font-bold text-gray-800">โหมด AI</h2></div>
+                   <div class="grid grid-cols-4 gap-4 px-2">
+                      <div onclick="goToAiAccounting()" class="flex flex-col items-center gap-2 active:scale-90 transition cursor-pointer">
+                          <div class="w-16 h-16 rounded-[1.3rem] bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-md border border-indigo-200"><i class="fas fa-file-invoice-dollar text-2xl"></i></div>
+                          <span class="text-[10px] font-bold text-gray-600">บัญชี</span>
+                      </div>
+                  </div>
+               </div>
+               <div id="aiAccountingSubPage" class="hidden flex-1 flex flex-col">
+                  <div class="flex items-center gap-3 mb-4 px-1"><button onclick="backFromAiAccounting()" class="text-gray-500 hover:text-gray-800"><i class="fas fa-chevron-left"></i></button><h2 class="text-xl font-bold text-gray-800">ตรวจสอบบัญชี</h2></div>
+                  <div class="glass p-4 rounded-2xl mb-4 space-y-3 mx-1 bg-white/70">
+                      <div class="flex gap-3"><input type="date" id="accStartDate" class="glass-input flex-1 h-10 rounded-xl px-2 text-xs bg-white text-gray-800"><input type="date" id="accEndDate" class="glass-input flex-1 h-10 rounded-xl px-2 text-xs bg-white text-gray-800"></div>
+                      <button onclick="handleCheckAccounting()" class="w-full h-10 bg-indigo-500 rounded-xl text-white text-sm font-bold shadow-lg hover:bg-indigo-600">ค้นหา</button>
+                  </div>
+                  <div id="accResultArea" class="hidden flex-1 flex flex-col overflow-hidden px-1">
+                       <div class="flex justify-between items-center mb-2 px-2"><div class="text-xs text-gray-500">รวม <span id="accTotalPrice" class="text-green-600 font-bold text-lg ml-1">0</span> บาท</div><button onclick="printAccountingReport()" class="bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-lg text-xs text-gray-700 font-bold"><i class="fas fa-print mr-1"></i> พิมพ์</button></div>
+                       <div class="flex-1 glass rounded-2xl overflow-hidden flex flex-col border border-white/60 bg-white/50">
+                          <div id="accListContainer" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
+                       </div>
+                  </div>
+               </div>
+          </div>
+      </div>
+    </main>
+
+    <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[26rem] h-16 glass-heavy rounded-[2rem] z-40 flex justify-around items-center px-4 shadow-xl border border-white/80">
+        <button id="btnTabHome" onclick="switchTab('home')" class="w-12 h-12 flex items-center justify-center rounded-full transition-all duration-300 text-blue-500 bg-blue-50 shadow-md">
+            <i class="fas fa-qrcode text-xl"></i>
+        </button>
+        <button id="btnTabApp" onclick="switchTab('app')" class="w-12 h-12 flex items-center justify-center rounded-full transition-all duration-300 text-gray-400 hover:text-gray-800 hover:bg-gray-100">
+            <i class="fas fa-th-large text-xl"></i>
+        </button>
+    </nav>
+
+    <div id="quickSearchModal" class="hidden fixed inset-0 z-[80] bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl max-h-[80vh] flex flex-col animate-scale-in border border-white/60 bg-white/95">
+            <div class="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-3"><i class="fas fa-search text-blue-500"></i> ผลการค้นหา</h3>
+                <button onclick="closeQuickSearchModal()" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800"><i class="fas fa-chevron-left"></i></button>
+            </div>
+            <div id="quickSearchResultContent" class="overflow-y-auto flex-1 space-y-3 p-1 text-gray-700"></div>
+        </div>
+    </div>
+
+    <div id="exitPopupModal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xl flex items-center justify-center p-6"><div class="glass w-full max-w-sm rounded-[2.5rem] p-8 animate-scale-in border border-white/60 relative shadow-2xl bg-white/95"><div class="text-center mb-6"><span class="text-gray-400 text-[10px] font-bold uppercase tracking-widest">ยอดชำระสุทธิ</span><div class="font-extrabold text-gray-800 mt-2 leading-none flex justify-center items-end gap-1"><span id="exitPriceDisplay" class="text-5xl break-all">0</span> <span class="text-2xl text-gray-400 mb-1">฿</span></div></div><div id="exitInfo" class="bg-gray-50 rounded-2xl p-5 mb-6 border border-gray-100 text-sm space-y-2 text-gray-600"></div><div id="slipImageContainer" onclick="openCamera('slip')" class="w-full h-32 border border-dashed border-gray-300 rounded-2xl flex items-center justify-center gap-2 mb-6 cursor-pointer hover:bg-gray-50 relative overflow-hidden transition group"><div id="slipPlaceholder" class="flex flex-col items-center gap-1 text-gray-400"><i class="fas fa-file-invoice-dollar text-2xl"></i><span class="text-[10px]">แนบสลิป</span></div><img id="slipPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-white"></div><div class="flex gap-3"><button onclick="resetHome()" class="flex-1 h-12 rounded-xl border border-gray-200 text-gray-500 font-bold hover:bg-gray-50 transition">ยกเลิก</button><button onclick="submitExit()" class="flex-1 h-12 rounded-xl bg-blue-500 text-white font-bold shadow-lg hover:bg-blue-600 transition">ยืนยัน</button></div></div></div>
+    <div id="historyDetailModal" class="hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-md flex items-center justify-center p-4"><div class="glass w-full max-w-sm rounded-[2.5rem] overflow-hidden relative max-h-[90vh] flex flex-col border border-white/60 bg-white/95"><div class="p-5 border-b border-gray-100 flex justify-between items-center flex-none"><div class="flex items-center gap-3"><button onclick="closeHistoryDetail()" class="text-gray-400 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"><i class="fas fa-chevron-left"></i></button><h3 class="font-bold text-gray-800">รายละเอียด</h3></div><div class="flex gap-2"><div id="histDetailViewControls" class="flex gap-2"><button onclick="enableHistoryEdit()" class="text-blue-500 text-xs bg-blue-50 px-3 py-1.5 rounded-lg">แก้ไข</button><button onclick="printHistoryDetail()" class="text-gray-400 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"><i class="fas fa-print"></i></button></div><div id="histDetailEditControls" class="hidden flex gap-2"><button onclick="cancelHistoryEdit()" class="text-gray-400 text-xs">ยกเลิก</button><button onclick="saveHistoryEdit()" class="text-red-500 text-xs">บันทึก</button></div></div></div><div id="histDetailContent" class="p-6 overflow-y-auto space-y-4"></div></div></div>
+    <div id="tempDetailModal" class="hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-md flex items-center justify-center p-4"><div class="glass w-full max-w-sm rounded-[2.5rem] overflow-hidden relative bg-white/95 border border-white/60"><div class="p-5 flex justify-between items-center border-b border-gray-100"><div class="flex items-center gap-3"><button onclick="closeTempDetail()" class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400"><i class="fas fa-chevron-left"></i></button><h3 class="font-bold text-gray-800">รายละเอียด</h3></div><div class="flex gap-2"><button id="tempDetailEditBtn" onclick="enableTempEdit()" class="text-blue-500 text-xs bg-blue-50 px-3 py-1.5 rounded-lg">แก้ไข</button></div></div><div id="tempDetailContent" class="p-6 text-gray-800"></div><div id="tempDetailDeleteBtn" class="p-4 pt-0"><button onclick="deleteCurrentTemp()" class="w-full py-2 bg-red-50 text-red-500 rounded-xl text-sm font-bold">ลบรายการ</button></div><div id="tempDetailEditControls" class="hidden p-4 flex gap-2"><button onclick="saveTempEdit()" class="flex-1 bg-blue-500 py-2 rounded-xl text-sm text-white">บันทึก</button><button onclick="cancelTempEdit()" class="flex-1 bg-gray-100 py-2 rounded-xl text-sm text-gray-500">ยกเลิก</button></div></div></div>
+    <div id="licenseDetailModal" class="hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-md flex items-center justify-center p-4"><div class="glass w-full max-w-sm rounded-[2.5rem] overflow-hidden relative max-h-[90vh] flex flex-col bg-white/95 border border-white/60"><div class="p-5 flex justify-between items-center flex-none border-b border-gray-100"><div class="flex items-center gap-3"><button onclick="closeLicenseDetail()" class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400"><i class="fas fa-chevron-left"></i></button><h3 class="font-bold text-gray-800">ข้อมูลรถ</h3></div><div id="licDetailViewControls"><button onclick="enableLicenseEdit()" class="text-blue-500 text-xs bg-blue-50 px-3 py-1.5 rounded-lg mr-2">แก้ไข</button></div><div id="licDetailEditControls" class="hidden"><button onclick="saveLicenseEdit()" class="text-red-500 text-xs mr-3">บันทึก</button><button onclick="cancelLicenseEdit()" class="text-gray-400 text-xs">ยกเลิก</button></div></div><div id="licDetailContent" class="p-6 overflow-y-auto space-y-4 text-gray-800"></div></div></div>
+    <div id="ownerDetailModal" class="hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-md flex items-center justify-center p-4"><div class="glass w-full max-w-sm rounded-[2.5rem] overflow-hidden relative max-h-[90vh] flex flex-col bg-white/95 border border-white/60"><div class="p-5 flex justify-between items-center flex-none border-b border-gray-100"><div class="flex items-center gap-3"><button onclick="closeOwnerDetail()" class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400"><i class="fas fa-chevron-left"></i></button><h3 class="font-bold text-gray-800">เจ้าของห้อง</h3></div><div id="ownerDetailViewControls"><button onclick="enableOwnerEdit()" class="text-blue-500 text-xs bg-blue-50 px-3 py-1.5 rounded-lg mr-2">แก้ไข</button></div><div id="ownerDetailEditControls" class="hidden"><button onclick="saveOwnerEdit()" class="text-red-500 text-xs mr-3">บันทึก</button><button onclick="cancelOwnerEdit()" class="text-white/50 text-xs">ยกเลิก</button></div></div><div id="ownerDetailContent" class="p-6 overflow-y-auto space-y-4 text-gray-800"></div></div></div>
+    <div id="addTempModal" class="hidden fixed inset-0 z-[80] bg-black/40 backdrop-blur-md flex items-center justify-center p-4"><div class="glass w-full max-w-sm rounded-[2.5rem] p-6 bg-white/95 border border-white/60"><div class="flex items-center gap-3 mb-5"><button onclick="closeAddTempModal()" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400"><i class="fas fa-chevron-left"></i></button><h3 class="text-lg font-bold text-gray-800">เพิ่มจอดชั่วคราว</h3></div><div class="space-y-3"><input id="tempRoom" placeholder="เลขห้อง" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="tempPlate" placeholder="ทะเบียนรถ" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><div class="grid grid-cols-2 gap-3"><input type="date" id="tempStartDate" class="glass-input h-10 rounded-xl px-2 text-xs bg-gray-50"><select id="tempStartHour" class="glass-input h-10 rounded-xl bg-gray-50"></select></div><div class="grid grid-cols-2 gap-3"><input type="date" id="tempEndDate" class="glass-input h-10 rounded-xl px-2 text-xs bg-gray-50"><select id="tempEndHour" class="glass-input h-10 rounded-xl bg-gray-50"></select></div><div onclick="captureTempAddImage()" class="w-full h-20 border border-dashed border-gray-300 rounded-xl flex items-center justify-center relative overflow-hidden hover:bg-gray-50"><img id="addTempImgPreview" class="hidden w-full h-full object-cover"><div id="addTempImgPlaceholder" class="text-gray-400 text-xs flex flex-col items-center gap-1"><i class="fas fa-image"></i> รูป</div></div></div><div class="mt-6"><button onclick="submitTempAdd()" class="w-full py-3 text-white bg-blue-500 rounded-2xl shadow-lg font-bold hover:bg-blue-600">บันทึก</button></div></div></div>
+    <div id="addLicenseModal" class="hidden fixed inset-0 z-[80] bg-black/40 backdrop-blur-md flex items-center justify-center p-4"><div class="glass w-full max-w-sm rounded-[2.5rem] p-6 bg-white/95 max-h-[90vh] overflow-y-auto border border-white/60"><div class="flex items-center gap-3 mb-5"><button onclick="closeAddLicenseModal()" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400"><i class="fas fa-chevron-left"></i></button><h3 class="text-lg font-bold text-gray-800">เพิ่มทะเบียนรถ</h3></div><div class="space-y-3"><input id="licPlate" placeholder="ทะเบียนรถ" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="licRoom" placeholder="เลขห้อง" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="licParkingRights" type="number" placeholder="สิทธิ์ (คัน)" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="licName" placeholder="ชื่อเจ้าของ" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="licPhone" placeholder="เบอร์โทร" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><textarea id="licNote" placeholder="Note" class="glass-input w-full h-20 rounded-xl p-4 bg-gray-50 border-gray-200"></textarea><div onclick="addLicenseImage()" class="w-full h-20 border border-dashed border-gray-300 rounded-xl flex items-center justify-center relative overflow-hidden hover:bg-gray-50"><img id="licImgPreview" class="hidden w-full h-full object-cover"><div id="licImgPlaceholder" class="text-gray-400 text-xs flex flex-col items-center gap-1"><i class="fas fa-image"></i> รูป</div></div></div><div class="mt-6"><button onclick="submitLicenseAdd()" class="w-full py-3 text-white bg-green-500 rounded-2xl shadow-lg font-bold hover:bg-green-600">บันทึก</button></div></div></div>
+    <div id="addOwnerModal" class="hidden fixed inset-0 z-[80] bg-black/40 backdrop-blur-md flex items-center justify-center p-4"><div class="glass w-full max-w-sm rounded-[2.5rem] p-6 bg-white/95 max-h-[90vh] overflow-y-auto border border-white/60"><div class="flex items-center gap-3 mb-5"><button onclick="closeAddOwnerModal()" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400"><i class="fas fa-chevron-left"></i></button><h3 class="text-lg font-bold text-gray-800">เพิ่มรายชื่อ</h3></div><div class="space-y-3"><input id="addOwnerRoom" placeholder="เลขห้อง" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="addOwnerName" placeholder="ชื่อ-สกุล" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><div class="grid grid-cols-2 gap-3"><input id="addOwnerFloor" placeholder="ชั้น" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="addOwnerSize" placeholder="ขนาด" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"></div><input id="addOwnerPhone1" placeholder="เบอร์ 1" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><input id="addOwnerPhone2" placeholder="เบอร์ 2" class="glass-input w-full h-12 rounded-xl px-4 bg-gray-50 border-gray-200"><textarea id="addOwnerNote" placeholder="Note" class="glass-input w-full h-20 rounded-xl p-4 bg-gray-50 border-gray-200"></textarea></div><div class="mt-6"><button onclick="submitOwnerAdd()" class="w-full py-3 text-white bg-purple-500 rounded-2xl shadow-lg font-bold hover:bg-purple-600">บันทึก</button></div></div></div>
+    
+    <div id="fullImageModal" class="hidden fixed inset-0 z-[90] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md" onclick="closeFullImage()"><img id="fullImagePreview" class="max-w-full max-h-full object-contain rounded-xl shadow-2xl"></div>
+    <div id="alertModal" class="hidden fixed inset-0 z-[90] bg-black/30 backdrop-blur-sm flex items-center justify-center p-8"><div class="glass bg-white/95 rounded-[2.5rem] p-8 w-72 text-center animate-scale-in border border-white/60 shadow-xl"><i id="alertIcon" class="fas fa-check-circle text-6xl text-green-500 mb-4"></i><h4 id="alertTitle" class="font-bold text-gray-800 text-xl mb-2"></h4><p id="alertMessage" class="text-gray-600 text-sm mb-6 leading-relaxed"></p><button onclick="closeAlert()" class="w-full py-3 bg-gray-100 text-gray-800 font-bold rounded-2xl hover:bg-gray-200 transition">ตกลง</button></div></div>
+    <div id="confirmModal" class="hidden fixed inset-0 z-[90] bg-black/30 backdrop-blur-sm flex items-center justify-center p-6"><div class="glass bg-white/95 rounded-[2.5rem] p-8 w-full max-w-xs text-center animate-scale-in border border-white/60 shadow-xl"><h4 id="confirmTitle" class="font-bold text-gray-800 text-xl mb-2"></h4><p id="confirmMessage" class="text-gray-600 text-sm mb-8"></p><div class="flex gap-4"><button onclick="closeConfirm()" class="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-2xl">ยกเลิก</button><button onclick="onConfirmYes()" class="flex-1 py-3 bg-red-500 text-white font-bold rounded-2xl shadow-lg">ยืนยัน</button></div></div></div>
+    <div id="pinModal" class="hidden fixed inset-0 z-[90] bg-black/50 backdrop-blur-md flex items-center justify-center p-6"><div class="glass bg-white/95 rounded-[2.5rem] p-8 w-full max-w-xs text-center animate-scale-in border border-white/60 shadow-xl"><div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-5 text-gray-400"><i class="fas fa-lock text-2xl"></i></div><h4 class="font-bold text-gray-800 text-lg mb-1">Security Check</h4><p class="text-gray-500 text-xs mb-6">กรอกรหัสผ่าน</p><input type="password" id="pinInput" class="w-full h-16 bg-gray-50 border border-gray-200 rounded-2xl text-center text-4xl font-bold tracking-[0.5em] mb-8 focus:border-blue-400 outline-none transition text-gray-800" placeholder="••••" maxlength="4" inputmode="numeric" onkeydown="if(event.key === 'Enter') submitAdminPin()"><div class="flex gap-4"><button onclick="closePinModal()" class="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-50 rounded-2xl">ยกเลิก</button><button onclick="submitAdminPin()" class="flex-1 py-3 bg-blue-500 text-white font-bold rounded-2xl shadow-lg hover:bg-blue-600">ยืนยัน</button></div></div></div>
+    <div id="qrModal" class="hidden fixed inset-0 z-[90] bg-black flex flex-col items-center justify-center p-4"><div class="bg-white rounded-3xl p-4 w-full max-w-sm relative border border-gray-200"><button onclick="stopQrScanner()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"><i class="fas fa-times text-xl"></i></button><h3 class="text-center font-bold text-gray-800 mb-4 mt-2">สแกน QR Code</h3><div id="reader" class="w-full rounded-2xl overflow-hidden bg-black h-80"></div></div></div>
+    <div id="cameraModal" class="hidden fixed inset-0 z-[80] bg-black flex flex-col"><div class="relative flex-1 bg-black flex items-center justify-center"><video id="cameraVideo" class="w-full h-full object-cover" autoplay playsinline></video><button onclick="closeCamera()" class="absolute top-6 right-6 text-white text-3xl z-10 drop-shadow-md p-2"><i class="fas fa-times"></i></button></div><div class="h-40 bg-black/60 backdrop-blur-sm flex items-center justify-center pb-6 absolute bottom-0 w-full"><button onclick="takePhoto()" class="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center active:scale-90 transition shadow-lg"><div class="w-16 h-16 bg-white rounded-full"></div></button></div></div>
+
+    <?!= include('js'); ?>
+  </body>
+</html>
