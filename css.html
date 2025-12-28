@@ -1,0 +1,78 @@
+<style>
+  /* 1. Import ฟอนต์ Sarabun */
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+
+  /* 2. ตั้งค่าพื้นฐาน (Theme: Pastel Aurora Light) */
+  body {
+    font-family: 'Sarabun', sans-serif;
+    /* พื้นหลังพาสเทลไหล: มิ้นท์ -> ชมพู -> ฟ้า */
+    background: linear-gradient(-45deg, #a8edea, #fed6e3, #a1c4fd, #c2e9fb);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    color: #1f2937; /* สีเทาเข้ม (เกือบดำ) สำหรับ Light Mode */
+    -webkit-font-smoothing: antialiased;
+  }
+
+  @keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* 3. Glass Effect (แบบสว่าง ฉ่ำวาว) */
+  .glass {
+    background: rgba(255, 255, 255, 0.65); /* ขาวโปร่งแสง */
+    backdrop-filter: blur(20px) saturate(180%); /* เบลอ + เร่งสีให้สดใส */
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.8); /* ขอบขาวชัด */
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15); /* เงานุ่มๆ */
+    color: #1f2937;
+  }
+
+  /* Navbar แบบเข้มขึ้นนิดนึง เพื่อให้ลอยเด่น */
+  .glass-heavy {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-top: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+  }
+
+  /* Input Design (พื้นขาวจางๆ ตัวหนังสือเข้ม) */
+  .glass-input {
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    color: #111827; /* ดำ */
+    transition: all 0.3s ease;
+  }
+  .glass-input::placeholder {
+    color: #6b7280; /* เทากลาง */
+  }
+  .glass-input:focus {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: #a1c4fd; /* สีฟ้าพาสเทล */
+    box-shadow: 0 0 15px rgba(161, 196, 253, 0.4);
+    outline: none;
+  }
+
+  /* Utility */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  input[type=number]::-webkit-inner-spin-button, 
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  
+  /* Animations */
+  .animate-float { animation: float 4s ease-in-out infinite; }
+  @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-5px); } 100% { transform: translateY(0px); } }
+  
+  .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  
+  .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+  /* Z-Index Fixes */
+  #alertModal { z-index: 100 !important; }
+  #pinModal { z-index: 90 !important; }
+</style>
