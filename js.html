@@ -1,0 +1,721 @@
+<script>
+  // ==========================================
+  // --- 1. CONFIG & SETUP ---
+  // ==========================================
+  if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              ios: { red: '#FF3B30', bg: '#F2F2F7', blue: '#007AFF', green: '#34C759' }
+            },
+            fontFamily: { sans: ['Sarabun', 'sans-serif'] }
+          }
+        }
+      }
+  }
+
+  // ตัวแปร Global
+  let currentMode = 'visitor';
+  
+  // เก็บข้อมูล
+  let tempActiveData = []; 
+  let tempHistoryData = []; 
+  let currentTempList = []; 
+  let currentTempTab = 'active'; 
+  
+  let historyData = []; 
+  let currentHistoryList = []; 
+  
+  let licenseData = []; 
+  let currentLicenseList = []; 
+  
+  let ownerData = []; 
+  let currentOwnerList = []; 
+
+  // ตัวแปรระบบ
+  let html5QrCode; 
+  let cameraStream = null; 
+  let targetPhotoType = '';
+  
+  let currentRecord = null; 
+  let currentPlateImg = null; 
+  let currentSlipImg = null; 
+  let tempAddPlateImg = null;
+  let licenseEditImg = null; 
+  let licenseAddImg = null;
+
+  let isHistoryEditMode = false; 
+  let selectedHistoryIndex = -1;
+  let isTempEditMode = false;
+
+  // Security
+  const ADMIN_PIN = '123'; 
+  const AI_PIN = '199'; 
+  let pendingPinAction = null; 
+  let pinCheckMode = 'admin'; 
+  let currentAccData = null;
+
+  // ==========================================
+  // --- 2. UTILITY FUNCTIONS ---
+  // ==========================================
+  function fixDriveLink(url) { return url || ""; }
+  
+  function toggleLoading(show) { 
+    const loader = document.getElementById('loader');
+    if(loader) loader.classList.toggle('hidden', !show);
+  }
+  
+  function showAlert(title, message, type='success') { 
+      document.getElementById('alertTitle').innerText = title;
+      document.getElementById('alertMessage').innerText = message;
+      const icon = document.getElementById('alertIcon');
+      if (type === 'success') {
+          icon.className = "fas fa-check-circle text-6xl text-green-500 mb-4 drop-shadow-md";
+      } else {
+          icon.className = "fas fa-exclamation-circle text-6xl text-red-500 mb-4 drop-shadow-md";
+      }
+      document.getElementById('alertModal').classList.remove('hidden'); 
+      document.getElementById('alertModal').classList.add('flex');
+  }
+  
+  function closeAlert() { 
+    document.getElementById('alertModal').classList.add('hidden'); 
+    document.getElementById('alertModal').classList.remove('flex');
+  }
+  
+  let confirmCallback = null;
+  function showConfirm(title, message, onConfirm) {
+    document.getElementById('confirmTitle').innerText = title;
+    document.getElementById('confirmMessage').innerText = message;
+    confirmCallback = onConfirm;
+    document.getElementById('confirmModal').classList.remove('hidden');
+    document.getElementById('confirmModal').classList.add('flex');
+  }
+  
+  function onConfirmYes() {
+      document.getElementById('confirmModal').classList.add('hidden');
+      document.getElementById('confirmModal').classList.remove('flex');
+      if(confirmCallback) confirmCallback();
+  }
+  
+  function closeConfirm() { 
+    document.getElementById('confirmModal').classList.add('hidden'); 
+    document.getElementById('confirmModal').classList.remove('flex');
+  }
+
+  // ==========================================
+  // --- 3. NAVIGATION ---
+  // ==========================================
+  function switchTab(tabName) {
+    document.getElementById('homeSection').classList.add('hidden');
+    document.getElementById('appSection').classList.add('hidden');
+    
+    const hBtn = document.getElementById('btnTabHome');
+    const aBtn = document.getElementById('btnTabApp');
+    
+    const inactiveClass = "w-12 h-12 flex items-center justify-center rounded-full transition-all duration-300 text-gray-400 hover:text-gray-800 hover:bg-gray-100";
+    const activeClass = "w-12 h-12 flex items-center justify-center rounded-full transition-all duration-300 text-blue-500 bg-blue-50 shadow-md";
+
+    if(hBtn) hBtn.className = inactiveClass;
+    if(aBtn) aBtn.className = inactiveClass;
+    
+    if(tabName === 'home') {
+      document.getElementById('homeSection').classList.remove('hidden');
+      if(hBtn) hBtn.className = activeClass;
+    } else {
+       document.getElementById('appSection').classList.remove('hidden');
+       if(aBtn) aBtn.className = activeClass;
+       openAppSubPage('menu');
+    }
+  }
+
+  function openAppSubPage(pageName) {
+      const pages = ['appMenuPage','tempParkingPage','visitorHistoryPage','licensePlatePage','ownerListPage','aiModePage'];
+      pages.forEach(id => {
+          const el = document.getElementById(id);
+          if(el) el.classList.add('hidden');
+      });
+
+      if(pageName === 'menu') {
+          document.getElementById('appMenuPage').classList.remove('hidden');
+      } else if(pageName === 'temp') {
+          document.getElementById('tempParkingPage').classList.remove('hidden');
+          loadTempData();
+      } else if(pageName === 'history') {
+          document.getElementById('visitorHistoryPage').classList.remove('hidden');
+          loadVisitorHistory();
+      } else if(pageName === 'license') { 
+          document.getElementById('licensePlatePage').classList.remove('hidden');
+          loadLicenseData();
+      } else if(pageName === 'owner') { 
+          document.getElementById('ownerListPage').classList.remove('hidden');
+          loadOwnerData();
+      } else if(pageName === 'ai') { 
+          document.getElementById('aiModePage').classList.remove('hidden');
+          if(document.getElementById('aiMenuSubPage')) {
+              document.getElementById('aiMenuSubPage').classList.remove('hidden');
+              document.getElementById('aiAccountingSubPage').classList.add('hidden');
+          }
+      }
+  }
+
+  // ==========================================
+  // --- 4. VISITOR SYSTEM ---
+  // ==========================================
+  function initHomeHeader() {
+      loadHomeTempStatus();
+  }
+
+  function loadHomeTempStatus() {
+      google.script.run.withSuccessHandler(renderHomeTempStatus).getAllTempData();
+  }
+
+  function renderHomeTempStatus(res) {
+      const container = document.getElementById('homeTempStatusContainer');
+      if (!container) return;
+      if (!document.getElementById('entryFormArea').classList.contains('hidden')) { container.classList.add('hidden'); return; }
+      
+      const activeList = res.active || [];
+      if (activeList.length === 0) { container.innerHTML = ''; container.classList.add('hidden'); return; }
+      
+      container.classList.remove('hidden');
+      let html = '<div class="text-[10px] text-gray-500 font-bold mb-2 pl-2 tracking-wide uppercase">รถจอดชั่วคราว</div>';
+      activeList.forEach(item => {
+          let badge = item.status === 'Waiting' ? '<span class="text-orange-600 bg-orange-100 rounded-lg px-2 py-1 text-[10px] font-bold">รอเข้า</span>' : '<span class="text-blue-600 bg-blue-100 rounded-lg px-2 py-1 text-[10px] font-bold">จอดอยู่</span>';
+          html += `
+            <div class="px-4 py-3 mb-2 bg-white/60 backdrop-blur-md rounded-2xl flex justify-between items-center border border-white/50 shadow-sm">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="flex flex-col min-w-0">
+                         <span class="font-bold text-gray-800 text-base truncate">${item.room}</span>
+                         <span class="text-gray-500 text-xs truncate">${item.plate}</span>
+                    </div>
+                </div>
+                ${badge}
+            </div>
+          `;
+      });
+      container.innerHTML = html;
+  }
+
+  function handleVisitorAction() {
+    const cardId = document.getElementById('visitorCardId').value;
+    if (!cardId) return showAlert('แจ้งเตือน', 'กรุณากรอกเลขบัตร', 'error');
+    toggleLoading(true);
+    google.script.run.withSuccessHandler(res => {
+      toggleLoading(false);
+      if (res.found) openCheckoutPopup(res);
+      else showEntryForm(cardId);
+    }).getParkingStatus(cardId);
+  }
+
+  function showEntryForm(cardId) {
+      document.getElementById('searchArea').classList.add('hidden');
+      document.getElementById('homeTempStatusContainer').classList.add('hidden');
+      document.getElementById('entryFormArea').classList.remove('hidden');
+      document.getElementById('entryCardIdDisplay').value = cardId;
+      document.getElementById('entryRoomNo').value = ""; 
+      setTimeout(() => document.getElementById('entryRoomNo').focus(), 300);
+  }
+
+  function submitEntry() { 
+    const cardId = document.getElementById('entryCardIdDisplay').value;
+    const roomNo = document.getElementById('entryRoomNo').value;
+    if (!cardId || !roomNo) return showAlert('แจ้งเตือน', 'ข้อมูลไม่ครบ', 'error');
+    if (!currentPlateImg) return showAlert('แจ้งเตือน', 'ถ่ายรูปทะเบียน', 'error');
+    toggleLoading(true);
+    google.script.run.withSuccessHandler(res => {
+        toggleLoading(false);
+        if (res.success) { showAlert('สำเร็จ', res.message, 'success'); resetHome(); }
+        else showAlert('ผิดพลาด', res.message, 'error');
+    }).saveEntry({ cardId, roomNo, plateImg: currentPlateImg });
+  }
+
+  function openCheckoutPopup(record) {
+      currentRecord = record;
+      const modal = document.getElementById('exitPopupModal');
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+      document.getElementById('exitInfo').innerHTML = `
+         <div class="space-y-3">
+             <div class="flex justify-between items-center border-b border-gray-100 pb-2">
+                <span class="text-gray-400 text-xs font-bold">เลขบัตร</span>
+                <span class="font-bold text-lg text-gray-800">${record.cardId}</span>
+             </div>
+             <div class="flex justify-between items-center border-b border-gray-100 pb-2">
+                <span class="text-gray-400 text-xs font-bold">เลขห้อง</span>
+                <span class="font-bold text-lg text-gray-800">${record.roomNo}</span>
+             </div>
+             <div class="flex justify-between items-center border-b border-gray-100 pb-2">
+                <span class="text-gray-400 text-xs font-bold">เข้า</span>
+                <span class="font-bold text-gray-800">${record.entryTime}</span>
+             </div>
+             <div class="flex justify-between items-center bg-gray-50 p-2 rounded-xl">
+                <span class="text-gray-400 text-xs font-bold">ระยะเวลา</span>
+                <span class="font-bold text-blue-600 text-lg">${record.durationText}</span>
+             </div>
+         </div>
+      `;
+      document.getElementById('exitPriceDisplay').innerText = record.price;
+  }
+
+  function submitExit() {
+    if (!currentRecord) return;
+    if (currentRecord.price > 0 && !currentSlipImg) return showAlert('แจ้งเตือน', 'กรุณาแนบสลิป', 'error');
+    showConfirm('ยืนยันรถออก', `ยอดชำระ ${currentRecord.price} บาท`, () => {
+        toggleLoading(true);
+        const data = { ...currentRecord, slipImg: currentSlipImg };
+        google.script.run.withSuccessHandler(res => {
+          toggleLoading(false);
+          document.getElementById('exitPopupModal').classList.add('hidden');
+          document.getElementById('exitPopupModal').classList.remove('flex');
+          if (res.success) { showAlert('สำเร็จ', res.message, 'success'); resetHome(); } 
+          else { showAlert('ผิดพลาด', res.message, 'error'); }
+        }).saveExit(data);
+    });
+  }
+
+  function resetHome() {
+      document.getElementById('visitorCardId').value = "";
+      document.getElementById('searchArea').classList.remove('hidden');
+      document.getElementById('entryFormArea').classList.add('hidden');
+      document.getElementById('entryRoomNo').value = "";
+      currentPlateImg = null;
+      document.getElementById('platePreview').classList.add('hidden');
+      document.getElementById('platePlaceholder').classList.remove('hidden');
+      currentRecord = null; currentSlipImg = null;
+      document.getElementById('slipPreview').classList.add('hidden');
+      document.getElementById('slipPlaceholder').classList.remove('hidden');
+      document.getElementById('exitPopupModal').classList.add('hidden');
+      document.getElementById('exitPopupModal').classList.remove('flex');
+      loadHomeTempStatus();
+  }
+
+  // ==========================================
+  // --- 5. VISITOR HISTORY ---
+  // ==========================================
+  function loadVisitorHistory() {
+      toggleLoading(true);
+      google.script.run.withSuccessHandler(data => {
+          toggleLoading(false);
+          historyData = data; 
+          renderHistoryList(historyData);
+      }).getHistory();
+  }
+
+  function renderHistoryList(data) {
+      const container = document.getElementById('historyListContainer');
+      container.innerHTML = '';
+      if(data.length === 0) { container.innerHTML = `<div class="text-center py-12 text-gray-400 flex flex-col items-center"><i class="fas fa-history text-4xl mb-3"></i><span>ไม่มีประวัติ</span></div>`; return; }
+
+      currentHistoryList = data;
+
+      data.forEach((item, index) => {
+          const isParked = item.status === 'Parked';
+          const badge = isParked ? `<span class="bg-blue-100 text-blue-600 px-2.5 py-1 rounded-lg text-[10px] font-bold">จอดอยู่</span>` : `<span class="bg-gray-100 text-gray-500 px-2.5 py-1 rounded-lg text-[10px] font-bold">ออกแล้ว</span>`;
+          
+          container.innerHTML += `
+            <div onclick="openHistoryDetail(${index})" class="bg-white/40 p-4 rounded-2xl mb-2 active:scale-95 transition cursor-pointer hover:bg-white/60 border border-white/50 shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div>
+                         <div class="flex items-center gap-2 mb-1">
+                            <span class="font-bold text-gray-800 text-lg">${item.roomNo}</span>
+                            <span class="text-[10px] bg-white/50 px-2 py-0.5 rounded-md text-gray-500 font-medium">บัตร ${item.cardId}</span>
+                         </div>
+                        <div class="text-[10px] text-gray-500 flex items-center gap-2 mt-1">
+                            <span><i class="far fa-clock mr-1"></i> ${isParked ? item.entryTime : item.exitTime}</span>
+                        </div>
+                    </div>
+                    <div class="text-right flex flex-col items-end gap-1">
+                        ${badge}
+                        <div class="font-bold text-gray-800 mt-0.5">${item.price} ฿</div>
+                    </div>
+                </div>
+            </div>
+          `;
+      });
+  }
+
+  function openHistoryDetail(index) {
+      const item = currentHistoryList[index];
+      if(!item) return showAlert('Error', 'ไม่พบข้อมูล');
+      selectedHistoryIndex = index;
+      currentRecord = item; 
+      isHistoryEditMode = false; 
+
+      const content = document.getElementById('histDetailContent');
+      content.innerHTML = `
+        <div class="grid grid-cols-2 gap-4">
+            <div class="bg-gray-50 p-3 rounded-2xl text-center"><span class="text-xs text-gray-400 font-bold">เลขบัตร</span><div class="font-bold text-xl text-gray-800">${item.cardId}</div></div>
+            <div class="bg-gray-50 p-3 rounded-2xl text-center"><span class="text-xs text-gray-400 font-bold">เลขห้อง</span><div class="font-bold text-xl text-gray-800">${item.roomNo}</div></div>
+        </div>
+        <div class="bg-white border border-gray-100 p-4 rounded-2xl space-y-2 mt-4 shadow-sm">
+            <div class="flex justify-between"><span class="text-gray-400 text-xs font-bold uppercase">เข้า</span><div class="text-right"><span class="text-gray-500 text-xs mr-2">${item.entryDateDisplay||'-'}</span><span class="font-bold text-lg text-gray-800">${item.entryTime||'-'}</span></div></div>
+            <div class="flex justify-between border-t border-gray-100 pt-2"><span class="text-gray-400 text-xs font-bold uppercase">ออก</span><div class="text-right"><span class="text-gray-500 text-xs mr-2">${item.exitDateDisplay||'-'}</span><span class="font-bold text-lg text-gray-800">${item.exitTime||'-'}</span></div></div>
+        </div>
+        <div class="bg-red-50 p-4 rounded-2xl flex justify-between items-center border border-red-100 mt-4"><span class="text-red-500 font-bold text-sm">ยอดชำระ</span><span class="text-red-600 font-extrabold text-2xl">${item.price} ฿</span></div>
+        <div class="grid grid-cols-3 gap-2 mt-2">
+            ${createImgBlock('Plate', 'car-side', 'รถ', item.plateImg)}
+            ${createImgBlock('Id', 'id-card', 'บัตร', item.idCardImg)}
+            ${createImgBlock('Slip', 'file-invoice', 'สลิป', item.slipImg)}
+        </div>
+      `;
+      document.getElementById('histDetailViewControls').classList.remove('hidden');
+      document.getElementById('histDetailEditControls').classList.add('hidden');
+      document.getElementById('historyDetailModal').classList.remove('hidden');
+      document.getElementById('historyDetailModal').classList.add('flex');
+  }
+
+  // --- แก้ไข: อนุญาตให้กดได้เสมอ เพื่อให้ handleHistoryImgClick ตัดสินใจเอง ---
+  function createImgBlock(idSuffix, icon, label, url) {
+      const showImg = url ? '' : 'hidden';
+      const showPlace = url ? 'hidden' : '';
+      const fixedUrl = fixDriveLink(url);
+      
+      // เอา onClickAttr ที่เคยเช็ค url ออก ให้กดได้ตลอด
+      return `
+        <div class="w-full aspect-square bg-gray-50 rounded-2xl overflow-hidden relative border border-gray-200 cursor-pointer hover:bg-gray-100 transition" onclick="handleHistoryImgClick('${idSuffix}')">
+            <img id="histDetail${idSuffix}Img" class="${showImg} w-full h-full object-cover" src="${fixedUrl}">
+            <div id="histDetail${idSuffix}Placeholder" class="${showPlace} absolute inset-0 flex flex-col items-center justify-center text-gray-300 gap-2">
+                <i class="fas fa-${icon} text-2xl"></i><span class="text-[10px] text-gray-400">${label}</span>
+            </div>
+            <div id="histDetail${idSuffix}Overlay" class="hidden absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-bold backdrop-blur-sm pointer-events-none">
+                <i class="fas fa-camera mr-1"></i> แก้ไข
+            </div>
+        </div>
+      `;
+  }
+  
+  // --- แก้ไข: Logic การกดรูป (View vs Edit) ---
+  function handleHistoryImgClick(type) { 
+      if(isHistoryEditMode) {
+          // ถ้าอยู่ในโหมดแก้ไข ยอมให้กดเฉพาะรูปบัตร (Id) เท่านั้น
+          if(type === 'Id') {
+              openCamera('history_' + type.toLowerCase()); 
+          }
+      } else { 
+          // ถ้าอยู่ในโหมดดูปกติ ให้ดูรูปเต็ม (ถ้ามีรูป)
+          const imgEl = document.getElementById('histDetail' + type + 'Img');
+          if(imgEl && !imgEl.classList.contains('hidden') && imgEl.src && imgEl.src !== '') {
+              viewFullImage(imgEl.src); 
+          }
+      } 
+  }
+  
+  function enableHistoryEdit() { 
+      isHistoryEditMode = true; 
+      
+      // แสดง Overlay เฉพาะที่รูปบัตร (Id)
+      const el = document.getElementById('histDetailIdOverlay');
+      if(el) el.classList.remove('hidden');
+      
+      document.getElementById('histDetailViewControls').classList.add('hidden'); 
+      document.getElementById('histDetailEditControls').classList.remove('hidden'); 
+  }
+  
+  function saveHistoryEdit() { isHistoryEditMode = false; showAlert('สำเร็จ', 'บันทึกข้อมูลเรียบร้อย'); openHistoryDetail(selectedHistoryIndex); }
+  function cancelHistoryEdit() { openHistoryDetail(selectedHistoryIndex); }
+  function closeHistoryDetail() { document.getElementById('historyDetailModal').classList.add('hidden'); document.getElementById('historyDetailModal').classList.remove('flex'); }
+  function printHistoryDetail() { if (selectedHistoryIndex === -1) return; const item = currentHistoryList[selectedHistoryIndex]; const w = window.open('', '', 'width=800,height=800'); w.document.write(`<html><head><title>ใบเสร็จ</title><style>body{font-family:sans-serif;padding:20px;text-align:center}.box{border:1px solid #ddd;padding:20px;margin-bottom:20px;border-radius:10px}.row{display:flex;justify-content:space-between;margin:5px 0}img{max-width:100%;margin-top:10px}</style></head><body><h2>BHR.LAB PARKING</h2><div class="box"><div class="row"><span>ห้อง</span><strong>${item.roomNo}</strong></div><div class="row"><span>บัตร</span><strong>${item.cardId}</strong></div><hr><div class="row"><span>เข้า</span><span>${item.entryTime}</span></div><div class="row"><span>ออก</span><span>${item.exitTime}</span></div><hr><h3>${item.price} บาท</h3></div>${item.slipImg ? `<img src="${item.slipImg}">` : ''}</body></html>`); w.document.close(); setTimeout(() => { w.print(); w.close(); }, 500); }
+
+  // ==========================================
+  // --- 6. TEMP PARKING ---
+  // ==========================================
+  function loadTempData() { toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); tempActiveData = res.active || []; tempHistoryData = res.history || []; renderTempList(); }).getAllTempData(); }
+  function switchTempTab(tab) { currentTempTab = tab; const activeClass = "flex-1 py-1.5 text-center text-xs font-bold rounded-lg bg-white shadow-sm text-blue-600 transition cursor-pointer"; const inactiveClass = "flex-1 py-1.5 text-center text-xs text-gray-500 transition cursor-pointer hover:text-gray-800"; document.getElementById('tabTempActive').className = tab === 'active' ? activeClass : inactiveClass; document.getElementById('tabTempHistory').className = tab === 'history' ? activeClass : inactiveClass; renderTempList(); }
+  
+  function renderTempList() {
+      const searchVal = document.getElementById('tempSearchInput').value.trim().toLowerCase();
+      let targetData = searchVal ? [...tempActiveData, ...tempHistoryData] : (currentTempTab === 'active' ? tempActiveData : tempHistoryData);
+      const container = document.getElementById('tempListContainer'); container.innerHTML = '';
+      
+      currentTempList = targetData.filter(item => (item.room||"").toString().toLowerCase().includes(searchVal) || (item.plate||"").toString().toLowerCase().includes(searchVal));
+      
+      if (currentTempList.length === 0) { container.innerHTML = `<div class="text-center py-12 text-gray-400 flex flex-col items-center"><i class="fas fa-inbox text-4xl mb-3"></i><span>ไม่มีรายการ</span></div>`; return; }
+      
+      currentTempList.forEach((item, index) => {
+          let badge = item.status === 'Waiting' ? '<span class="text-orange-600 font-bold text-[10px] bg-orange-100 px-2 py-1 rounded-lg">รอเข้า</span>' : (item.status === 'Parked' ? '<span class="text-blue-600 font-bold text-[10px] bg-blue-100 px-2 py-1 rounded-lg">จอดอยู่</span>' : (item.status === 'Expired' ? '<span class="text-red-600 font-bold text-[10px] bg-red-100 px-2 py-1 rounded-lg">หมดเวลา</span>' : '<span class="text-green-600 font-bold text-[10px] bg-green-100 px-2 py-1 rounded-lg">จบงาน</span>'));
+          
+          container.innerHTML += `
+            <div onclick="openTempDetail(${index})" class="bg-white/40 p-4 rounded-2xl mb-2 active:scale-95 transition cursor-pointer hover:bg-white/60 border border-white/50 backdrop-blur-sm shadow-sm">
+                <div class="flex justify-between items-center">
+                    <div class="flex flex-col flex-1 overflow-hidden mr-2">
+                         <div class="font-bold text-gray-800 text-lg truncate">${item.room}</div>
+                         <div class="text-sm text-gray-600 truncate">${item.plate}</div>
+                         <div class="text-[10px] text-gray-500 mt-1">${item.startTimeDisplay}</div>
+                    </div>
+                    <div class="flex-none">${badge}</div>
+                </div>
+            </div>
+          `;
+      });
+  }
+
+  function openTempDetail(index) {
+      const item = currentTempList[index];
+      if (!item) return showAlert('แจ้งเตือน', 'ไม่พบข้อมูลรายการนี้', 'error');
+      
+      currentRecord = item; isTempEditMode = false;
+      const content = document.getElementById('tempDetailContent');
+      content.innerHTML = `
+        <div class="grid grid-cols-2 gap-4 mb-4">
+            <div><label class="text-xs text-gray-400">ห้อง</label><div id="viewTempRoom" class="font-bold text-xl text-gray-800">${item.room}</div><input id="editTempRoom" class="hidden w-full bg-gray-50 border border-gray-200 rounded p-1 text-gray-800" value="${item.room}"></div>
+            <div><label class="text-xs text-gray-400">ทะเบียน</label><div id="viewTempPlate" class="font-bold text-xl text-gray-800">${item.plate}</div><input id="editTempPlate" class="hidden w-full bg-gray-50 border border-gray-200 rounded p-1 text-gray-800" value="${item.plate}"></div>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-xl space-y-2 mb-4 text-sm text-gray-600 border border-gray-100">
+            <div class="flex justify-between"><span>เริ่ม</span><span class="font-medium">${item.startTimeDisplay}</span></div>
+            <div class="flex justify-between"><span>สิ้นสุด</span><span class="font-medium">${item.endTimeDisplay}</span></div>
+            <div class="flex justify-between text-blue-600 font-bold"><span>สถานะ</span><span>${item.status}</span></div>
+        </div>
+        <div class="w-full aspect-square bg-gray-50 rounded-xl overflow-hidden relative border border-gray-200" onclick="handleTempImgClick()">
+            <img id="detailTempImg" class="${item.plateImg?'':'hidden'} w-full h-full object-cover" src="${fixDriveLink(item.plateImg)}">
+            <div id="detailTempImgPlaceholder" class="${item.plateImg?'hidden':''} absolute inset-0 flex flex-col items-center justify-center text-gray-300 gap-2"><i class="fas fa-image text-3xl"></i><span class="text-xs text-gray-400">ไม่มีรูป</span></div>
+            <div id="detailTempImgOverlay" class="hidden absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-bold">เปลี่ยนรูป</div>
+        </div>
+      `;
+      document.getElementById('tempDetailViewControls').classList.remove('hidden'); document.getElementById('tempDetailEditControls').classList.add('hidden'); document.getElementById('tempDetailDeleteBtn').classList.remove('hidden'); document.getElementById('tempDetailModal').classList.remove('hidden'); document.getElementById('tempDetailModal').classList.add('flex');
+  }
+
+  function enableTempEdit() { requestAdminPin(() => { isTempEditMode = true; document.getElementById('viewTempRoom').classList.add('hidden'); document.getElementById('editTempRoom').classList.remove('hidden'); document.getElementById('viewTempPlate').classList.add('hidden'); document.getElementById('editTempPlate').classList.remove('hidden'); document.getElementById('detailTempImgOverlay').classList.remove('hidden'); document.getElementById('tempDetailViewControls').classList.add('hidden'); document.getElementById('tempDetailEditControls').classList.remove('hidden'); document.getElementById('tempDetailEditBtn').classList.add('hidden'); }); }
+  function saveTempEdit() { const newRoom = document.getElementById('editTempRoom').value; const newPlate = document.getElementById('editTempPlate').value; toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); if(res.success) { showAlert('สำเร็จ', 'บันทึกเรียบร้อย'); loadTempData(); closeTempDetail(); } else showAlert('ผิดพลาด', 'บันทึกไม่ได้'); }).updateTempEntry({ rowIndex: currentRecord.rowIndex, room: newRoom, plate: newPlate }); }
+  function deleteCurrentTemp() { if (!currentRecord) return; requestAdminPin(() => { showConfirm("ยกเลิกรายการ", "ยืนยัน?", () => { toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); closeTempDetail(); if(res.success) loadTempData(); }).deleteTempEntry(currentRecord.rowIndex); }); }); }
+  function closeTempDetail() { document.getElementById('tempDetailModal').classList.add('hidden'); document.getElementById('tempDetailModal').classList.remove('flex'); }
+  function cancelTempEdit() { closeTempDetail(); }
+  function handleTempImgClick() { if (isTempEditMode) triggerFileUpload('temp_update'); else { const src = document.getElementById('detailTempImg').src; if(src && !src.includes('hidden')) viewFullImage(src); } }
+  function openAddTempModal() { requestAdminPin(() => { const now = new Date(); const offset = now.getTimezoneOffset() * 60000; const localISOTime = (new Date(now - offset)).toISOString().slice(0, 10); document.getElementById('tempStartDate').value = localISOTime; document.getElementById('tempEndDate').value = localISOTime; document.getElementById('tempRoom').value = ""; document.getElementById('tempPlate').value = ""; tempAddPlateImg = null; document.getElementById('addTempImgPreview').classList.add('hidden'); document.getElementById('addTempImgPlaceholder').classList.remove('hidden'); let opts = ''; for(let i=0;i<24;i++){ const h=i.toString().padStart(2,'0'); opts+=`<option value="${h}">${h}:00</option>`; } document.getElementById('tempStartHour').innerHTML = opts; document.getElementById('tempStartHour').value = "09"; document.getElementById('tempEndHour').innerHTML = opts; document.getElementById('tempEndHour').value = "18"; document.getElementById('addTempModal').classList.remove('hidden'); document.getElementById('addTempModal').classList.add('flex'); }); }
+  function closeAddTempModal() { document.getElementById('addTempModal').classList.add('hidden'); document.getElementById('addTempModal').classList.remove('flex'); }
+  function captureTempAddImage() { triggerFileUpload('temp_add'); }
+  function submitTempAdd() { const room = document.getElementById('tempRoom').value; const plate = document.getElementById('tempPlate').value; const startDate = document.getElementById('tempStartDate').value; const endDate = document.getElementById('tempEndDate').value; if(!room || !plate || !startDate || !endDate) return showAlert('แจ้งเตือน', 'ข้อมูลไม่ครบ'); const data = { room, plate, startDate, startHour:document.getElementById('tempStartHour').value, endDate, endHour:document.getElementById('tempEndHour').value, plateImg: tempAddPlateImg }; toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); closeAddTempModal(); if(res.success) { showAlert('สำเร็จ', 'เพิ่มรายการแล้ว'); loadTempData(); } else showAlert('ผิดพลาด', 'เพิ่มไม่ได้'); }).addManualTempEntry(data); }
+
+  // ==========================================
+  // --- 7. LICENSE & OWNER ---
+  // ==========================================
+  function loadLicenseData() { toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); licenseData = res; renderLicenseList(); }).getLicenseList(); }
+  function renderLicenseList() {
+      const container = document.getElementById('licenseListContainer');
+      const searchVal = document.getElementById('licenseSearchInput').value.trim().toLowerCase();
+      
+      currentLicenseList = (licenseData || []).filter(item => (item.plate||"").toLowerCase().includes(searchVal) || (item.room||"").toLowerCase().includes(searchVal));
+      
+      if (currentLicenseList.length === 0) { container.innerHTML = `<div class="text-center py-12 text-gray-400"><i class="fas fa-car-crash text-4xl mb-3"></i><br>ไม่พบข้อมูล</div>`; return; }
+      
+      container.innerHTML = currentLicenseList.map((item, index) => `
+        <div onclick="openLicenseDetail(${index})" class="bg-white/40 p-4 rounded-2xl mb-2 active:scale-95 transition cursor-pointer hover:bg-white/60 border border-white/50 backdrop-blur-sm relative group shadow-sm">
+            <div class="flex justify-between items-center">
+                <div class="flex flex-col flex-1 overflow-hidden">
+                    <div class="font-bold text-gray-800 text-lg">${item.room}</div>
+                    <div class="text-sm text-gray-700">${item.plate}</div>
+                    <div class="text-xs text-gray-500 mt-1">${item.name||'-'}</div>
+                </div>
+                ${item.phone ? `<a href="tel:${item.phone}" onclick="event.stopPropagation()" class="w-10 h-10 rounded-full bg-green-500/20 text-green-600 flex items-center justify-center hover:bg-green-500 hover:text-white transition z-10 mr-2"><i class="fas fa-phone"></i></a>` : ''}
+                <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+            </div>
+        </div>
+      `).join('');
+  }
+
+  function openLicenseDetail(index) {
+      const item = currentLicenseList[index];
+      if(!item) return showAlert('Error', 'ไม่พบข้อมูล');
+      currentRecord = item;
+      
+      const content = document.getElementById('licDetailContent');
+      content.innerHTML = `
+        <div class="w-full h-40 bg-gray-50 rounded-2xl mb-4 overflow-hidden relative border border-gray-200 flex items-center justify-center">
+             ${item.img ? `<img src="${fixDriveLink(item.img)}" class="w-full h-full object-cover" onclick="viewFullImage(this.src)">` : `<div class="flex flex-col items-center text-gray-300"><i class="fas fa-car text-3xl mb-1"></i><span>ไม่มีรูป</span></div>`}
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div><span class="text-xs text-gray-400">ห้อง</span><div class="font-bold text-lg text-gray-800">${item.room}</div><input id="editLicRoom" class="hidden w-full bg-gray-50 border border-gray-200 rounded p-1 text-gray-800" value="${item.room}"></div>
+            <div><span class="text-xs text-gray-400">ทะเบียน</span><div class="font-bold text-lg text-gray-800">${item.plate}</div><input id="editLicPlate" class="hidden w-full bg-gray-50 border border-gray-200 rounded p-1 text-gray-800" value="${item.plate}"></div>
+        </div>
+        <div class="bg-blue-50 p-3 rounded-xl flex justify-between mt-4 border border-blue-100">
+            <span class="text-blue-500 font-bold">สิทธิ์</span>
+            <span class="font-extrabold text-blue-700">${item.rights} คัน</span>
+            <input id="editLicRights" class="hidden w-16 text-right bg-gray-50 border border-gray-200 rounded p-1 text-gray-800" value="${item.rights}">
+        </div>
+        <div class="mt-4 space-y-2">
+            <div><span class="text-xs text-gray-400">ชื่อ</span><div class="text-gray-800">${item.name||'-'}</div><input id="editLicName" class="hidden w-full bg-gray-50 border border-gray-200 rounded p-1 text-gray-800" value="${item.name}"></div>
+            <div><span class="text-xs text-gray-400">โทร</span><a href="tel:${item.phone}" class="block text-blue-600 font-bold text-lg">${item.phone||'-'}</a><input id="editLicPhone" class="hidden w-full bg-gray-50 border border-gray-200 rounded p-1 text-gray-800" value="${item.phone}"></div>
+            <div><span class="text-xs text-gray-400">Note</span><div class="bg-gray-50 p-2 rounded text-sm text-gray-600">${item.note||'-'}</div><textarea id="editLicNote" class="hidden w-full bg-gray-50 border border-gray-200 rounded p-1 text-gray-800">${item.note}</textarea></div>
+        </div>
+      `;
+      document.getElementById('licDetailViewControls').classList.remove('hidden'); document.getElementById('licDetailEditControls').classList.add('hidden'); document.getElementById('licenseDetailModal').classList.remove('hidden'); document.getElementById('licenseDetailModal').classList.add('flex');
+  }
+  
+  function closeLicenseDetail() { document.getElementById('licenseDetailModal').classList.add('hidden'); document.getElementById('licenseDetailModal').classList.remove('flex'); }
+  function enableLicenseEdit() { requestAdminPin(() => { renderLicenseEditMode(); }); }
+  function renderLicenseEditMode() {
+      const item = currentRecord;
+      document.getElementById('licDetailContent').innerHTML = `
+         <div class="space-y-3">
+            <input id="editLicRoom" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.room}" placeholder="ห้อง">
+            <input id="editLicPlate" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.plate}" placeholder="ทะเบียน">
+            <input id="editLicName" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.name}" placeholder="ชื่อ">
+            <input id="editLicPhone" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.phone}" placeholder="โทร">
+            <input id="editLicRights" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.rights}" type="number" placeholder="สิทธิ์">
+            <textarea id="editLicNote" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800">${item.note}</textarea>
+         </div>
+         <button onclick="deleteCurrentLicense()" class="w-full py-2 text-red-500 font-bold bg-red-50 rounded mt-4">ลบรายการ</button>
+      `;
+      document.getElementById('licDetailViewControls').classList.add('hidden'); document.getElementById('licDetailEditControls').classList.remove('hidden');
+  }
+  function saveLicenseEdit() { const updateData = { id: currentRecord.id, room: document.getElementById('editLicRoom').value, plate: document.getElementById('editLicPlate').value, name: document.getElementById('editLicName').value, phone: document.getElementById('editLicPhone').value, note: document.getElementById('editLicNote').value, rights: document.getElementById('editLicRights').value }; toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); if(res.success) { showAlert('สำเร็จ', 'บันทึกเรียบร้อย'); loadLicenseData(); closeLicenseDetail(); } }).updateLicensePlate(updateData); }
+  function cancelLicenseEdit() { closeLicenseDetail(); }
+  function deleteCurrentLicense() { showConfirm("ลบรายการ", "ยืนยัน?", () => { toggleLoading(true); google.script.run.withSuccessHandler(() => { toggleLoading(false); closeLicenseDetail(); loadLicenseData(); }).deleteLicensePlate(currentRecord.id); }); }
+  function openAddLicenseModal() { requestAdminPin(() => { document.getElementById('addLicenseModal').classList.remove('hidden'); document.getElementById('addLicenseModal').classList.add('flex'); }); }
+  function closeAddLicenseModal() { document.getElementById('addLicenseModal').classList.add('hidden'); document.getElementById('addLicenseModal').classList.remove('flex'); }
+  function submitLicenseAdd() { const plate = document.getElementById('licPlate').value; const room = document.getElementById('licRoom').value; if(!plate || !room) return showAlert('แจ้งเตือน', 'ข้อมูลไม่ครบ'); toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); closeAddLicenseModal(); loadLicenseData(); }).addLicensePlate({ plate, room, name:document.getElementById('licName').value, phone:document.getElementById('licPhone').value, note:document.getElementById('licNote').value, rights:document.getElementById('licParkingRights').value, plateImg: licenseAddImg }); }
+  function addLicenseImage() { triggerFileUpload('license_add'); }
+
+  // Owner List
+  function loadOwnerData() { toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); ownerData = res; renderOwnerList(); }).getOwnerList(); }
+  function renderOwnerList() {
+      const container = document.getElementById('ownerListContainer');
+      const searchVal = document.getElementById('ownerSearchInput').value.trim().toLowerCase();
+      
+      currentOwnerList = (ownerData||[]).filter(item => (item.room||"").includes(searchVal) || (item.name||"").includes(searchVal));
+      
+      if (currentOwnerList.length === 0) { container.innerHTML = `<div class="text-center py-12 text-gray-400"><i class="fas fa-user-slash text-4xl mb-3"></i><br>ไม่พบข้อมูล</div>`; return; }
+      
+      container.innerHTML = currentOwnerList.map((item, index) => `
+        <div onclick="openOwnerDetail(${index})" class="bg-white/40 p-4 rounded-2xl mb-2 active:scale-95 transition cursor-pointer relative hover:bg-white/60 border border-white/50 backdrop-blur-sm group shadow-sm">
+            <div class="flex justify-between items-center">
+                <div class="flex flex-col flex-1 overflow-hidden">
+                    <div class="font-bold text-gray-800 text-lg">${item.room}</div>
+                    <div class="text-sm text-gray-700 truncate">${item.name}</div>
+                    <div class="text-xs text-gray-500 truncate">${item.phone1 || '-'}</div>
+                </div>
+                ${item.phone1 ? `<a href="tel:${item.phone1}" onclick="event.stopPropagation()" class="w-10 h-10 rounded-full bg-green-500/20 text-green-600 flex items-center justify-center hover:bg-green-500 hover:text-white transition z-10"><i class="fas fa-phone"></i></a>` : ''}
+            </div>
+        </div>
+      `).join('');
+  }
+
+  function openOwnerDetail(index) {
+      const item = currentOwnerList[index];
+      if(!item) return showAlert('Error', 'ไม่พบข้อมูล');
+      currentRecord = item;
+      const content = document.getElementById('ownerDetailContent');
+      content.innerHTML = `
+        <div class="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"><span class="text-xs text-gray-400">ห้อง</span><div class="font-bold text-2xl text-gray-800">${item.room}</div></div>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+             <div class="bg-gray-50 p-3 rounded-xl border border-gray-100"><span class="text-xs text-gray-400">ชั้น</span><div class="font-bold text-gray-700">${item.floor||'-'}</div></div>
+             <div class="bg-gray-50 p-3 rounded-xl border border-gray-100"><span class="text-xs text-gray-400">ขนาด</span><div class="font-bold text-gray-700">${item.size||'-'}</div></div>
+        </div>
+        <div class="mb-4"><span class="text-xs text-gray-400">ชื่อ</span><div class="font-bold text-lg text-gray-800">${item.name}</div></div>
+        <div class="space-y-3">
+            <div><span class="text-xs text-gray-400">โทร 1</span><a href="tel:${item.phone1}" class="block text-blue-600 font-bold text-lg">${item.phone1||'-'}</a></div>
+            <div><span class="text-xs text-gray-400">โทร 2</span><a href="tel:${item.phone2}" class="block text-blue-600 font-bold text-lg">${item.phone2||'-'}</a></div>
+            <div><span class="text-xs text-gray-400">Note</span><div class="bg-gray-50 p-3 rounded-xl text-sm text-gray-600 border border-gray-100">${item.note||'-'}</div></div>
+        </div>
+      `;
+      document.getElementById('ownerDetailViewControls').classList.remove('hidden'); document.getElementById('ownerDetailEditControls').classList.add('hidden'); document.getElementById('ownerDetailModal').classList.remove('hidden'); document.getElementById('ownerDetailModal').classList.add('flex');
+  }
+  
+  function closeOwnerDetail() { document.getElementById('ownerDetailModal').classList.add('hidden'); document.getElementById('ownerDetailModal').classList.remove('flex'); }
+  function enableOwnerEdit() { requestAdminPin(() => { 
+      const item = currentRecord;
+      document.getElementById('ownerDetailContent').innerHTML = `
+         <div class="space-y-3">
+            <input id="editOwnerRoom" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.room}" placeholder="ห้อง">
+            <input id="editOwnerName" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.name}" placeholder="ชื่อ">
+            <div class="grid grid-cols-2 gap-2">
+                <input id="editOwnerFloor" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.floor}" placeholder="ชั้น">
+                <input id="editOwnerSize" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.size}" placeholder="ขนาด">
+            </div>
+            <input id="editOwnerPhone1" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.phone1}" placeholder="Phone 1">
+            <input id="editOwnerPhone2" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800" value="${item.phone2}" placeholder="Phone 2">
+            <textarea id="editOwnerNote" class="w-full bg-gray-50 border border-gray-200 p-2 rounded text-gray-800">${item.note}</textarea>
+         </div>
+         <button onclick="deleteCurrentOwner()" class="w-full py-2 text-red-500 font-bold bg-red-50 rounded mt-4">ลบรายการ</button>
+      `;
+      document.getElementById('ownerDetailViewControls').classList.add('hidden'); document.getElementById('ownerDetailEditControls').classList.remove('hidden');
+  }); }
+  function saveOwnerEdit() { const data = { id: currentRecord.id, room: document.getElementById('editOwnerRoom').value, name: document.getElementById('editOwnerName').value, floor: document.getElementById('editOwnerFloor').value, size: document.getElementById('editOwnerSize').value, phone1: document.getElementById('editOwnerPhone1').value, phone2: document.getElementById('editOwnerPhone2').value, note: document.getElementById('editOwnerNote').value }; toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); if(res.success) { loadOwnerData(); closeOwnerDetail(); } }).updateOwner(data); }
+  function cancelOwnerEdit() { closeOwnerDetail(); }
+  function deleteCurrentOwner() { showConfirm("ลบรายการ", "ยืนยัน?", () => { toggleLoading(true); google.script.run.withSuccessHandler(() => { toggleLoading(false); closeOwnerDetail(); loadOwnerData(); }).deleteOwner(currentRecord.id); }); }
+  function openAddOwnerModal() { requestAdminPin(() => { document.getElementById('addOwnerModal').classList.remove('hidden'); document.getElementById('addOwnerModal').classList.add('flex'); }); }
+  function closeAddOwnerModal() { document.getElementById('addOwnerModal').classList.add('hidden'); document.getElementById('addOwnerModal').classList.remove('flex'); }
+  function submitOwnerAdd() { const room = document.getElementById('addOwnerRoom').value; const name = document.getElementById('addOwnerName').value; if(!room || !name) return showAlert('แจ้งเตือน', 'กรอกข้อมูลให้ครบ'); toggleLoading(true); google.script.run.withSuccessHandler(() => { toggleLoading(false); closeAddOwnerModal(); loadOwnerData(); }).addOwner({room, name, floor:document.getElementById('addOwnerFloor').value, size:document.getElementById('addOwnerSize').value, phone1:document.getElementById('addOwnerPhone1').value, phone2:document.getElementById('addOwnerPhone2').value, note:document.getElementById('addOwnerNote').value}); }
+
+  // ==========================================
+  // --- 8. AI & SECURITY ---
+  // ==========================================
+  function requestAdminPin(cb) { pendingPinAction = cb; document.getElementById('pinInput').value = ''; document.getElementById('pinModal').classList.remove('hidden'); document.getElementById('pinModal').classList.add('flex'); }
+  function submitAdminPin() { 
+      const val = document.getElementById('pinInput').value; 
+      let correct = (pinCheckMode === 'ai' ? (val === AI_PIN) : (val === ADMIN_PIN));
+      if(correct) { 
+          closePinModal(); 
+          if(pendingPinAction) pendingPinAction(); 
+          pinCheckMode = 'admin'; 
+      } else { 
+          closePinModal(); 
+          setTimeout(() => { showAlert('Error', 'รหัสผิด', 'error'); }, 200);
+      }
+  }
+  function closePinModal() { document.getElementById('pinModal').classList.add('hidden'); document.getElementById('pinModal').classList.remove('flex'); pinCheckMode = 'admin'; }
+  function openAiMode() { pinCheckMode='ai'; requestAdminPin(() => openAppSubPage('ai')); }
+  function goToAiAccounting() { document.getElementById('aiMenuSubPage').classList.add('hidden'); document.getElementById('aiAccountingSubPage').classList.remove('hidden'); }
+  function backFromAiAccounting() { document.getElementById('aiAccountingSubPage').classList.add('hidden'); document.getElementById('aiMenuSubPage').classList.remove('hidden'); }
+  function handleCheckAccounting() { const start = document.getElementById('accStartDate').value; const end = document.getElementById('accEndDate').value; if(!start || !end) return showAlert('แจ้งเตือน', 'เลือกวันที่'); toggleLoading(true); google.script.run.withSuccessHandler(res => { toggleLoading(false); renderAccountingResult(res); }).getAccountingReport(start, end); }
+  function renderAccountingResult(data) { currentAccData = data; document.getElementById('accTotalPrice').innerText = data.summary.totalPrice.toLocaleString(); const c = document.getElementById('accListContainer'); document.getElementById('accResultArea').classList.remove('hidden'); if(data.details.length === 0) { c.innerHTML = '<div class="text-center p-4 text-white/50">ไม่มีข้อมูล</div>'; return; } c.innerHTML = data.details.map(d => `<div class="flex justify-between border-b border-white/10 p-2 text-xs text-gray-800"><div class="w-1/3">${d.roomNo}</div><div class="w-1/3 text-center">${d.exitTime.split(' ')[1] || '-'}</div><div class="w-1/3 text-right font-bold">${d.price}</div></div>`).join(''); }
+  function printAccountingReport() { if(!currentAccData) return; const w = window.open('', '', 'width=900,height=800'); const rows = currentAccData.details.map((d,i) => `<tr><td>${i+1}</td><td>${d.roomNo}</td><td>${d.exitTime}</td><td>${d.price}</td></tr>`).join(''); w.document.write(`<html><head><title>รายงานสรุปรายได้</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f2f2f2}</style></head><body><h2>รายงานสรุปรายได้</h2><p>วันที่: ${currentAccData.summary.startDate} - ${currentAccData.summary.endDate}</p><p><strong>รวมทั้งสิ้น: ${currentAccData.summary.totalPrice.toLocaleString()} บาท</strong> (${currentAccData.summary.totalCars} คัน)</p><table><thead><tr><th>#</th><th>ห้อง/ทะเบียน</th><th>เวลาออก</th><th>ราคา</th></tr></thead><tbody>${rows}</tbody></table></body></html>`); w.document.close(); setTimeout(() => { w.focus(); w.print(); w.close(); }, 500); }
+
+  function handleQuickSearch() {
+      const q = document.getElementById('quickSearchInput').value.trim();
+      if(!q) return;
+      toggleLoading(true);
+      google.script.run.withSuccessHandler(res => {
+          toggleLoading(false);
+          renderQuickSearchResult(res);
+      }).quickSearchVehicle(q);
+  }
+
+  function renderQuickSearchResult(res) {
+      const modal = document.getElementById('quickSearchModal');
+      const content = document.getElementById('quickSearchResultContent');
+      content.innerHTML = '';
+      if (!res.found) {
+           content.innerHTML = '<div class="text-center py-8 text-gray-400">ไม่พบข้อมูล</div>';
+      } else {
+           res.results.forEach(item => {
+               content.innerHTML += `
+                  <div class="bg-white/40 p-4 rounded-xl border border-white/50 mb-2 backdrop-blur-sm shadow-sm">
+                      <div class="flex justify-between mb-1"><span class="font-bold text-lg text-gray-800">${item.room}</span><span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded">${item.type}</span></div>
+                      <div class="text-gray-600 text-sm mb-1">${item.plate}</div>
+                      ${item.name && item.name !== '-' ? `<div class="text-gray-500 text-xs">${item.name}</div>` : ''}
+                      ${item.info ? `<div class="text-green-600 text-xs mt-2 pt-2 border-t border-gray-200">${item.info}</div>` : ''}
+                  </div>
+               `;
+           });
+      }
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+  }
+  function closeQuickSearchModal() { document.getElementById('quickSearchModal').classList.add('hidden'); document.getElementById('quickSearchModal').classList.remove('flex'); }
+
+  // ==========================================
+  // --- 9. CAMERA & HELPERS ---
+  // ==========================================
+  function viewFullImage(src) { document.getElementById('fullImagePreview').src = src; document.getElementById('fullImageModal').classList.remove('hidden'); }
+  function closeFullImage() { document.getElementById('fullImageModal').classList.add('hidden'); }
+  function triggerFileUpload(t) { targetPhotoType = t; document.getElementById('fileInput').click(); }
+  function handleFileSelect(inp) { if(inp.files && inp.files[0]) { toggleLoading(true); const r = new FileReader(); r.onload = (e) => { toggleLoading(false); savePhoto(e.target.result); }; r.readAsDataURL(inp.files[0]); } inp.value = ''; }
+  function savePhoto(b64) {
+      if(targetPhotoType === 'plate') { currentPlateImg = b64; document.getElementById('platePreview').src = b64; document.getElementById('platePreview').classList.remove('hidden'); document.getElementById('platePlaceholder').classList.add('hidden'); }
+      else if(targetPhotoType === 'slip') { currentSlipImg = b64; document.getElementById('slipPreview').src = b64; document.getElementById('slipPreview').classList.remove('hidden'); document.getElementById('slipPlaceholder').classList.add('hidden'); }
+      else if(targetPhotoType.includes('license')) { licenseAddImg = b64; document.getElementById('licImgPreview').src = b64; document.getElementById('licImgPreview').classList.remove('hidden'); document.getElementById('licImgPlaceholder').classList.add('hidden'); }
+      else if(targetPhotoType.includes('temp')) { tempAddPlateImg = b64; document.getElementById('addTempImgPreview').src = b64; document.getElementById('addTempImgPreview').classList.remove('hidden'); document.getElementById('addTempImgPlaceholder').classList.add('hidden'); }
+      else if(targetPhotoType.startsWith('history_')) { 
+          const type = targetPhotoType.replace('history_', '');
+          toggleLoading(true);
+          google.script.run.withSuccessHandler(res => { toggleLoading(false); if(res.success) { document.getElementById('histDetail'+type.charAt(0).toUpperCase()+type.slice(1)+'Img').src = res.url; } }).saveRecordImage({ sheetName: currentRecord.sheetName || 'Visitor_Log', rowIndex: currentRecord.rowIndex, cardId: currentRecord.cardId, imageType: type, base64: b64 });
+      }
+  }
+  function openCamera(t) { targetPhotoType = t; document.getElementById('cameraModal').classList.remove('hidden'); document.getElementById('cameraModal').classList.add('flex'); initCam(); }
+  function closeCamera() { document.getElementById('cameraModal').classList.add('hidden'); document.getElementById('cameraModal').classList.remove('flex'); }
+  function initCam() { navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}}).then(s => { const v = document.getElementById('cameraVideo'); v.srcObject = s; v.play(); cameraStream = s; }); }
+  function takePhoto() { const v = document.getElementById('cameraVideo'); const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v,0,0); savePhoto(c.toDataURL('image/jpeg', 0.7)); closeCamera(); }
+  function startQrScanner() { document.getElementById('qrModal').classList.remove('hidden'); document.getElementById('qrModal').classList.add('flex'); html5QrCode = new Html5Qrcode("reader"); html5QrCode.start({facingMode:"environment"}, {fps:10, qrbox:250}, (t)=>{stopQrScanner(); document.getElementById('visitorCardId').value=t; handleVisitorAction();}); }
+  function stopQrScanner() { if(html5QrCode) html5QrCode.stop().then(()=>{html5QrCode.clear(); document.getElementById('qrModal').classList.add('hidden'); document.getElementById('qrModal').classList.remove('flex');}); }
+</script>
